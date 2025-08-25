@@ -15,7 +15,6 @@ import {
   SidebarMenuItem,
   SidebarFooter,
 } from '@/components/ui/sidebar'
-import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
@@ -44,7 +43,7 @@ export function AppSidebar() {
   const [isHovered, setIsHovered] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
 
-  const isAdmin = user?.role === 'admin'
+  const isAdmin = user?.role?.toUpperCase?.() === 'ADMIN'
   const shouldExpand = isOpen || isHovered
 
   useEffect(() => {

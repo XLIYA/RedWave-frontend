@@ -4,48 +4,31 @@ import { api } from '@/lib/api'
  * Utility functions for file uploads
  */
 
+import { MAX_AUDIO_BYTES, MAX_IMAGE_BYTES, ALLOWED_AUDIO_MIMES, ALLOWED_IMAGE_MIMES } from '@/lib/fileValidators'
+
 export interface FileValidationResult {
   isValid: boolean
   error?: string
 }
 
-export const validateFileSize = (file: File, maxSizeMB: number): FileValidationResult => {
-  const maxSizeBytes = maxSizeMB * 1024 * 1024
-  
-  if (file.size > maxSizeBytes) {
-    return {
-      isValid: false,
-      error: `File size must be less than ${maxSizeMB}MB`
-    }
+export const validateImageFile = (file: File): FileValidationResult => {
+  if (!ALLOWED_IMAGE_MIMES.includes(file.type)) {
+    return { isValid: false, error: 'Only JPG, PNG, WEBP are allowed' }
   }
-  
+  if (file.size > MAX_IMAGE_BYTES) {
+    return { isValid: false, error: 'Image must be ≤ 10 MB' }
+  }
   return { isValid: true }
 }
 
-export const validateImageFile = (file: File): FileValidationResult => {
-  const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
-  
-  if (!allowedTypes.includes(file.type)) {
-    return {
-      isValid: false,
-      error: 'Invalid image format. Please use JPG, PNG, GIF, or WebP'
-    }
-  }
-  
-  return validateFileSize(file, 5) // 5MB limit for images
-}
-
 export const validateAudioFile = (file: File): FileValidationResult => {
-  const allowedTypes = ['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/flac', 'audio/ogg']
-  
-  if (!allowedTypes.includes(file.type)) {
-    return {
-      isValid: false,
-      error: 'Invalid audio format. Please use MP3, WAV, FLAC, or OGG'
-    }
+  if (!ALLOWED_AUDIO_MIMES.includes(file.type)) {
+    return { isValid: false, error: 'Audio must be MP3/WAV/OGG/FLAC/AAC/M4A/WEBM' }
   }
-  
-  return validateFileSize(file, 30) // 30MB limit for audio
+  if (file.size > MAX_AUDIO_BYTES) {
+    return { isValid: false, error: 'Audio must be ≤ 100 MB' }
+  }
+  return { isValid: true }
 }
 
 export const formatFileSize = (bytes: number): string => {
@@ -204,7 +187,7 @@ export const uploadWithRetry = async (
  */
 export const isAudioFile = (file: File): boolean => {
   return file.type.startsWith('audio/') || 
-         ['mp3', 'wav', 'flac', 'ogg', 'm4a'].includes(getFileExtension(file.name).toLowerCase())
+         ['mp3', 'wav', 'flac', 'ogg', 'm4a', 'aac', 'webm'].includes(getFileExtension(file.name).toLowerCase())
 }
 
 /**
@@ -212,7 +195,7 @@ export const isAudioFile = (file: File): boolean => {
  */
 export const isImageFile = (file: File): boolean => {
   return file.type.startsWith('image/') || 
-         ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].includes(getFileExtension(file.name).toLowerCase())
+         ['jpg', 'jpeg', 'png', 'webp', 'bmp'].includes(getFileExtension(file.name).toLowerCase())
 }
 
 /**

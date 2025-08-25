@@ -66,19 +66,16 @@ export default function LyricsPage() {
       const songData = await api.getSong(songId)
       setSong(songData)
 
-      // دریافت متن آهنگ
-      try {
-        const lyricsData = await api.getLyrics(songId)
+      // ✅ استفاده از متد quiet برای جلوگیری از خطای console در 404
+      const lyricsData = await api.getLyricsQuiet(songId)
+      
+      if (lyricsData) {
         setLyrics(lyricsData)
         setLyricsText(lyricsData.lyricsText || '')
-      } catch (lyricsError: any) {
-        // اگر متن وجود نداشت، فیلد خالی نمایش داده شود
-        if (lyricsError.status === 404) {
-          setLyrics(null)
-          setLyricsText('')
-        } else {
-          throw lyricsError
-        }
+      } else {
+        // متن پیدا نشد (404) - این عادی و مورد انتظار است
+        setLyrics(null)
+        setLyricsText('')
       }
     } catch (err: any) {
       console.error('Fetch error:', err)
@@ -264,7 +261,7 @@ export default function LyricsPage() {
                 <div className="flex items-center gap-2">
                   <Badge variant="secondary">{song.genre}</Badge>
                   <span className="text-sm text-muted-foreground">
-                    Uploaded by{song.uploadedBy.username}
+                    Uploaded by {song.uploadedBy.username}
                   </span>
                 </div>
               </div>
@@ -281,7 +278,7 @@ export default function LyricsPage() {
             Lyrics of the song
             {lyrics && (
               <Badge variant="outline" className="ml-auto">
-                Latest update: {new Date(lyrics.updatedAt).toLocaleDateString('fa-IR')}
+                Latest update: {new Date(lyrics.updatedAt).toLocaleDateString()}
               </Badge>
             )}
           </CardTitle>
@@ -300,7 +297,7 @@ export default function LyricsPage() {
 
               <div className="flex items-center justify-between">
                 <div className="text-sm text-muted-foreground">
-                  {lyricsText.length} character
+                  {lyricsText.length} characters
                 </div>
 
                 <div className="flex items-center gap-2">
@@ -313,12 +310,11 @@ export default function LyricsPage() {
                       setMessage('')
                     }}
                   >
-                    cancel
+                    Cancel
                   </Button>
                   <Button
                     onClick={handleSave}
                     disabled={saving || !lyricsText.trim()}
-                    className="btn-gradient"
                   >
                     <Save className="h-4 w-4 mr-2" />
                     {saving ? 'Saving...' : 'Save'}
@@ -341,20 +337,36 @@ export default function LyricsPage() {
               )}
             </div>
           ) : (
+            // ✅ حالت خالی تمیز - بدون خطای console برای متن‌های گم‌شده
             <div className="text-center py-12 space-y-4">
               <Music className="h-12 w-12 text-muted-foreground mx-auto" />
               <div className="space-y-2">
-                <h3 className="text-lg font-medium">There are no lyrics for this song</h3>
+                <h3 className="text-lg font-medium">No Lyrics Yet</h3>
                 {canEdit ? (
                   <p className="text-muted-foreground">
-                    Click the "Add Lyrics" button to add lyrics
+                    Click the "Add Lyrics" button to add lyrics for this track
                   </p>
                 ) : (
                   <p className="text-muted-foreground">
-                    The lyrics for this song have not been added yet.
+                    Lyrics for this track are not available at the moment.
                   </p>
                 )}
               </div>
+              
+              {/* اختیاری: CTA مشارکت برای غیر ویراستاران */}
+              {!canEdit && (
+                <div className="mt-6">
+                  <Button variant="outline" size="sm" asChild>
+                    <a 
+                      href={`mailto:support@yourapp.com?subject=Lyrics for ${song?.title || 'Song'}`}
+                      className="inline-flex items-center"
+                    >
+                      <Music className="h-4 w-4 mr-2" />
+                      Suggest lyrics for this track
+                    </a>
+                  </Button>
+                </div>
+              )}
             </div>
           )}
         </CardContent>

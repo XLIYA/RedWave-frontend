@@ -18,7 +18,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { TrackCard } from '@/components/music/TrackCard'
+import { TrackCard } from '@/app/(app)/home/components/TrackCard'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Track, User, Playlist } from '@/lib/types'
 import { useSearch } from '@/hooks/useSearch'
@@ -257,7 +257,15 @@ export default function ExplorePage() {
                           className="transform transition-all duration-500 hover:scale-105"
                           style={{ animationDelay: `${index * 50}ms` }}
                         >
-                          <TrackCard track={track} showPlayCount />
+                          <TrackCard
+                            track={track}
+                            index={index}
+                            viewMode={'grid'}
+                            onPlay={() => {}}
+                            onLike={() => {}}
+                            onAddToPlaylist={() => {}}
+                            showPlayCount
+                          />
                         </div>
                       ))}
                     </div>

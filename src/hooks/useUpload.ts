@@ -21,7 +21,7 @@ export const useUpload = () => {
     try {
       console.log('📤 Starting cover upload:', file.name)
       
-      const result = await api.uploadCover(file, (progress) => {
+      const result = await api.uploadCover(file, (progress: any) => {
         console.log(`Cover upload progress: ${progress}%`)
         setProgress(prev => ({ ...prev, cover: progress }))
       })
@@ -45,7 +45,7 @@ export const useUpload = () => {
     try {
       console.log('📤 Starting audio upload:', file.name)
       
-      const result = await api.uploadAudio(file, (progress) => {
+      const result = await api.uploadAudio(file, (progress: any) => {
         console.log(`Audio upload progress: ${progress}%`)
         setProgress(prev => ({ ...prev, audio: progress }))
       })

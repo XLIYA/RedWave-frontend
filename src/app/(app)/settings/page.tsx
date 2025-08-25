@@ -1,202 +1,142 @@
+// src/app/(app)/setting/page.tsx
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Save, Shield, User, Bell, Globe, Camera, Eye, EyeOff } from 'lucide-react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
-import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar'
-import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Separator } from '@/components/ui/separator'
+import { Skeleton } from '@/components/ui/skeleton'
+import { AlertCircle, User, Shield, Bell, Users, Music, Heart, Code } from 'lucide-react'
+
 import { useAuth } from '@/hooks/useAuth'
 import { api } from '@/lib/api'
+import { AccountSnapshot } from './components/AccountSnapshot'
+import { SocialLinksForm } from './components/SocialLinksForm'
+import { AdminCtaCard } from './components/AdminCtaCard'
+import PasswordForm from './components/PasswordForm'
+import PresenceCard from './components/PresenceCard'
+import ConnectionsPanel from './components/ConnectionsPanel'
+import UploadsPanel from './components/UploadsPanel'
+import LikesPanel from './components/LikesPanel'
+import ApiDocsCard from './components/ApiDocsCard'
 
 interface UserProfile {
   id: string
   username: string
-  role: string
-  bio?: string
-  profileImage?: string
+  email?: string
+  role: 'admin' | 'user'
+  bio?: string | null
+  profileImage?: string | null
   socialLinks?: {
     instagram?: string
     telegram?: string
     twitter?: string
     website?: string
-  }
+  } | null
   isOnline: boolean
+  createdAt: string
+  lastSeen?: string | null
+  _count?: {
+    followers: number
+    following: number
+    songs: number
+    likes: number
+    playlists: number
+  }
 }
 
-export default function SettingsPage() {
+export default function SettingPage() {
   const { user, updateUser } = useAuth()
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
-  const [changingPassword, setChangingPassword] = useState(false)
+  const [activeTab, setActiveTab] = useState('account')
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
 
-  // Profile form
-  const [bio, setBio] = useState('')
-  const [profileImage, setProfileImage] = useState('')
-  const [socialLinks, setSocialLinks] = useState({
-    instagram: '',
-    telegram: '',
-    twitter: '',
-    website: ''
-  })
-
-  // Password form
-  const [currentPassword, setCurrentPassword] = useState('')
-  const [newPassword, setNewPassword] = useState('')
-  const [confirmPassword, setConfirmPassword] = useState('')
-  const [showCurrentPassword, setShowCurrentPassword] = useState(false)
-  const [showNewPassword, setShowNewPassword] = useState(false)
-
-  // Settings
-  const [isOnline, setIsOnline] = useState(true)
-  const [notifications, setNotifications] = useState({
-    emailUpdates: true,
-    playlistUpdates: true,
-    followerUpdates: true,
-    messageUpdates: true
-  })
-
   useEffect(() => {
     fetchProfile()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const fetchProfile = async () => {
     try {
       setLoading(true)
+      setError('')
       const data = await api.getMe()
       setProfile(data)
-      setBio(data.bio || '')
-      setProfileImage(data.profileImage || '')
-      setSocialLinks(data.socialLinks || {
-        instagram: '',
-        telegram: '',
-        twitter: '',
-        website: ''
-      })
-      setIsOnline(!!data.isOnline)
-    } catch (err) {
-      console.error('Profile fetch error:', err)
-      setError('Error loading settings')
+    } catch (err: any) {
+      console.error('Failed to load profile:', err)
+      setError('Failed to load profile data')
     } finally {
       setLoading(false)
     }
   }
 
-  const handleProfileSave = async () => {
-    try {
-      setSaving(true)
-      setMessage('')
-      setError('')
-
-      const updateData = {
-        bio: bio.trim() || null,
-        profileImage: profileImage.trim() || null,
-        socialLinks: socialLinks
-      }
-
-      // اگر API کاربر آپدیت‌شده را برگرداند، همان را به updateUser بده؛
-      // در غیر این‌صورت، از updateData (Partial<User>) استفاده کن.
-      const updated = await api.updateMe(updateData).catch(() => undefined)
-
-      // ✅ اینجا آرگومان به updateUser داده می‌شود تا ارور ts(2554) رفع شود.
-      updateUser((updated && typeof updated === 'object') ? updated : updateData)
-
-      // state محلی را هم به‌روز کنیم تا UI فوراً رفرش شود
-      setProfile(prev => prev ? { ...prev, ...((updated && typeof updated === 'object') ? updated : updateData) } as UserProfile : prev)
-
-      setMessage('Profile successfully updated')
-    } catch (err: any) {
-      console.error('Profile update error:', err)
-      setError(err?.message || 'Error updating profile')
-    } finally {
-      setSaving(false)
+  const handleProfileUpdate = (updatedProfile: UserProfile) => {
+    setProfile(updatedProfile)
+    const userUpdate = {
+      ...updatedProfile,
+      bio: updatedProfile.bio || undefined,
+      profileImage: updatedProfile.profileImage || undefined,
+      socialLinks: updatedProfile.socialLinks || undefined,
+      lastSeen: updatedProfile.lastSeen || undefined
     }
+    updateUser(userUpdate)
   }
 
-  const handlePasswordChange = async () => {
-    try {
-      setChangingPassword(true)
+  const showMessage = (msg: string, isError = false) => {
+    if (isError) {
+      setError(msg)
+      setMessage('')
+    } else {
+      setMessage(msg)
+      setError('')
+    }
+
+    setTimeout(() => {
       setMessage('')
       setError('')
-
-      if (newPassword !== confirmPassword) {
-        setError('New password and repeat password must be the same')
-        return
-      }
-
-      if (newPassword.length < 6) {
-        setError('The new password must be at least 6 characters long')
-        return
-      }
-
-      await api.changePassword({
-        currentPassword,
-        newPassword
-      })
-
-      setMessage('Password changed successfully')
-      setCurrentPassword('')
-      setNewPassword('')
-      setConfirmPassword('')
-    } catch (err: any) {
-      console.error('Password change error:', err)
-      setError(err?.message || 'Error changing password')
-    } finally {
-      setChangingPassword(false)
-    }
-  }
-
-  const handleOnlineStatusChange = async (checked: boolean) => {
-    try {
-      setIsOnline(checked)
-      await api.setOnlineStatus({ isOnline: checked })
-      // ✅ هم Auth context و هم state محلی را به‌روز می‌کنیم
-      updateUser({ isOnline: checked })
-      setProfile(prev => prev ? { ...prev, isOnline: checked } : prev)
-    } catch (err) {
-      console.error('Online status error:', err)
-      setIsOnline(!checked) // Revert on error
-    }
+    }, 5000)
   }
 
   if (loading) {
     return (
-      <div className="space-y-6">
-        <div className="h-8 bg-muted animate-pulse rounded" />
+      <div className="space-y-6 animate-fade-in text-left">
+        <div className="space-y-2">
+          <Skeleton className="h-8 w-48" />
+          <Skeleton className="h-4 w-96" />
+        </div>
         <div className="grid gap-6">
           {Array.from({ length: 3 }).map((_, i) => (
-            <Card key={i}>
-              <CardHeader>
-                <div className="h-6 bg-muted animate-pulse rounded" />
-              </CardHeader>
-              <CardContent className="space-y-4">
+            <div key={i} className="glass p-6 rounded-lg space-y-4">
+              <Skeleton className="h-6 w-32" />
+              <div className="space-y-4">
                 {Array.from({ length: 3 }).map((_, j) => (
-                  <div key={j} className="h-10 bg-muted animate-pulse rounded" />
+                  <Skeleton key={j} className="h-10 w-full" />
                 ))}
-              </CardContent>
-            </Card>
+              </div>
+            </div>
           ))}
         </div>
       </div>
     )
   }
 
+  if (!profile) {
+    return (
+      <div className="flex items-center justify-center min-h-96 animate-fade-in">
+        <Alert className="max-w-md text-left">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>Failed to load data. Please refresh the page.</AlertDescription>
+        </Alert>
+      </div>
+    )
+  }
+
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-6 animate-fade-in text-left">
       {/* Header */}
       <div className="space-y-2">
         <h1 className="text-3xl font-bold gradient-text">Settings</h1>
-        <p className="text-muted-foreground">Account management and personal settings</p>
+        <p className="text-muted-foreground">Manage your account, privacy, and platform settings</p>
       </div>
 
       {/* Messages */}
@@ -212,315 +152,96 @@ export default function SettingsPage() {
         </Alert>
       )}
 
-      <Tabs defaultValue="profile" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="profile" className="flex items-center gap-2">
-            <User className="h-4 w-4" />
-            Profile
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+        <TabsList className="grid w-full grid-cols-6 glass">
+          <TabsTrigger value="account" className="flex items-center gap-2 text-xs">
+            <User className="h-3 w-3" />
+            Account
           </TabsTrigger>
-          <TabsTrigger value="security" className="flex items-center gap-2">
-            <Shield className="h-4 w-4" />
+          <TabsTrigger value="security" className="flex items-center gap-2 text-xs">
+            <Shield className="h-3 w-3" />
             Security
           </TabsTrigger>
-          <TabsTrigger value="preferences" className="flex items-center gap-2">
-            <Bell className="h-4 w-4" />
-            Settings
+          <TabsTrigger value="presence" className="flex items-center gap-2 text-xs">
+            <Bell className="h-3 w-3" />
+            Presence
+          </TabsTrigger>
+          <TabsTrigger value="connections" className="flex items-center gap-2 text-xs">
+            <Users className="h-3 w-3" />
+            Connections
+          </TabsTrigger>
+          <TabsTrigger value="content" className="flex items-center gap-2 text-xs">
+            <Music className="h-3 w-3" />
+            Content
+          </TabsTrigger>
+          <TabsTrigger value="developer" className="flex items-center gap-2 text-xs">
+            <Code className="h-3 w-3" />
+            Developer
           </TabsTrigger>
         </TabsList>
 
-        {/* Profile Tab */}
-        <TabsContent value="profile" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <User className="h-5 w-5" />
-                Profile information
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {/* Avatar Section */}
-              <div className="flex items-center gap-4">
-                <Avatar className="h-20 w-20">
-                  <AvatarImage src={profileImage} />
-                  <AvatarFallback className="text-xl font-bold bg-primary text-primary-foreground">
-                    {(profile?.username?.charAt(0).toUpperCase() || 'U')}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="space-y-2">
-                  <Label htmlFor="profileImage">Profile picture</Label>
-                  <div className="flex gap-2">
-                    <Input
-                      id="profileImage"
-                      placeholder="Profile image link"
-                      value={profileImage}
-                      onChange={(e) => setProfileImage(e.target.value)}
-                      className="flex-1"
-                    />
-                    <Button variant="outline" size="icon" type="button">
-                      <Camera className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-              </div>
+        {/* Account Tab */}
+        <TabsContent value="account" className="space-y-6">
+          <AccountSnapshot profile={profile} />
 
-              <Separator />
+          <SocialLinksForm profile={profile} onUpdate={handleProfileUpdate} onMessage={showMessage} />
 
-              {/* Basic Info */}
-              <div className="grid gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="username">Username</Label>
-                  <Input
-                    id="username"
-                    value={profile?.username || ''}
-                    disabled
-                    className="bg-muted"
-                  />
-                  <p className="text-sm text-muted-foreground">Username cannot be changed.</p>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="bio">Bio</Label>
-                  <Textarea
-                    id="bio"
-                    placeholder="Write a few words about yourself..."
-                    value={bio}
-                    onChange={(e) => setBio(e.target.value)}
-                    rows={3}
-                  />
-                </div>
-              </div>
-
-              <Separator />
-
-              {/* Social Links */}
-              <div className="space-y-4">
-                <Label className="text-base font-semibold">Social links</Label>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="instagram">Instagram</Label>
-                    <Input
-                      id="instagram"
-                      placeholder="@username"
-                      value={socialLinks.instagram}
-                      onChange={(e) => setSocialLinks({ ...socialLinks, instagram: e.target.value })}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="telegram">Telegram</Label>
-                    <Input
-                      id="telegram"
-                      placeholder="@username"
-                      value={socialLinks.telegram}
-                      onChange={(e) => setSocialLinks({ ...socialLinks, telegram: e.target.value })}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="twitter">Twitter</Label>
-                    <Input
-                      id="twitter"
-                      placeholder="@username"
-                      value={socialLinks.twitter}
-                      onChange={(e) => setSocialLinks({ ...socialLinks, twitter: e.target.value })}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="website">Website</Label>
-                    <Input
-                      id="website"
-                      placeholder="https://example.com"
-                      value={socialLinks.website}
-                      onChange={(e) => setSocialLinks({ ...socialLinks, website: e.target.value })}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex justify-end">
-                <Button onClick={handleProfileSave} disabled={saving} className="btn-gradient" type="button">
-                  <Save className="h-4 w-4 ml-2" />
-                  {saving ? 'Saving...' : 'Save changes'}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+          {profile.role === 'admin' && <AdminCtaCard />}
         </TabsContent>
 
         {/* Security Tab */}
         <TabsContent value="security" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Shield className="h-5 w-5" />
-                Change password
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="currentPassword">Current password</Label>
-                <div className="relative">
-                  <Input
-                    id="currentPassword"
-                    type={showCurrentPassword ? 'text' : 'password'}
-                    value={currentPassword}
-                    onChange={(e) => setCurrentPassword(e.target.value)}
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="absolute left-0 top-0 h-full px-3 hover:bg-transparent"
-                    onClick={() => setShowCurrentPassword(!showCurrentPassword)}
-                  >
-                    {showCurrentPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </Button>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="newPassword">New password</Label>
-                <div className="relative">
-                  <Input
-                    id="newPassword"
-                    type={showNewPassword ? 'text' : 'password'}
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="absolute left-0 top-0 h-full px-3 hover:bg-transparent"
-                    onClick={() => setShowNewPassword(!showNewPassword)}
-                  >
-                    {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </Button>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="confirmPassword">Repeat new password</Label>
-                <Input
-                  id="confirmPassword"
-                  type="password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                />
-              </div>
-
-              <div className="flex justify-end">
-                <Button
-                  onClick={handlePasswordChange}
-                  disabled={changingPassword || !currentPassword || !newPassword || !confirmPassword}
-                  className="btn-gradient"
-                  type="button"
-                >
-                  {changingPassword ? 'Changing...' : 'Change password'}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+          <PasswordForm onMessage={showMessage} />
         </TabsContent>
 
-        {/* Preferences Tab */}
-        <TabsContent value="preferences" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Globe className="h-5 w-5" />
-                Attendance status
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label>Show online status</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Others can see that you are online.
-                  </p>
-                </div>
-                <Switch
-                  checked={isOnline}
-                  onCheckedChange={handleOnlineStatusChange}
-                />
-              </div>
-            </CardContent>
-          </Card>
+        {/* Presence & Preferences Tab */}
+        <TabsContent value="presence" className="space-y-6">
+          <PresenceCard
+            isOnline={profile.isOnline}
+            onOnlineChange={async (isOnline) => {
+              try {
+                await api.setOnlineStatus({ isOnline })
+                const updatedProfile = { ...profile, isOnline }
+                handleProfileUpdate(updatedProfile)
+              } catch (err) {
+                showMessage('Failed to update online status', true)
+              }
+            }}
+          />
+        </TabsContent>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Bell className="h-5 w-5" />
-                Notifications
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label>Email updates</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Receive notifications via email
-                  </p>
-                </div>
-                <Switch
-                  checked={notifications.emailUpdates}
-                  onCheckedChange={(checked) =>
-                    setNotifications({ ...notifications, emailUpdates: checked })
-                  }
-                />
-              </div>
+        {/* Connections Tab */}
+        <TabsContent value="connections" className="space-y-6">
+          <ConnectionsPanel onMessage={showMessage} />
+        </TabsContent>
 
-              <Separator />
+        {/* Content Tab (My Uploads + My Likes) */}
+        <TabsContent value="content" className="space-y-6">
+          <Tabs defaultValue="uploads" className="space-y-4">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="uploads" className="flex items-center gap-2">
+                <Music className="h-4 w-4" />
+                My Uploads
+              </TabsTrigger>
+              <TabsTrigger value="likes" className="flex items-center gap-2">
+                <Heart className="h-4 w-4" />
+                Likes
+              </TabsTrigger>
+            </TabsList>
 
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label>Playlist updates</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Notification when songs are added to playlists
-                  </p>
-                </div>
-                <Switch
-                  checked={notifications.playlistUpdates}
-                  onCheckedChange={(checked) =>
-                    setNotifications({ ...notifications, playlistUpdates: checked })
-                  }
-                />
-              </div>
+            <TabsContent value="uploads">
+              <UploadsPanel profile={profile} onMessage={showMessage} />
+            </TabsContent>
 
-              <Separator />
+            <TabsContent value="likes">
+              <LikesPanel onMessage={showMessage} />
+            </TabsContent>
+          </Tabs>
+        </TabsContent>
 
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label>New followers</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Notification when being followed by new users
-                  </p>
-                </div>
-                <Switch
-                  checked={notifications.followerUpdates}
-                  onCheckedChange={(checked) =>
-                    setNotifications({ ...notifications, followerUpdates: checked })
-                  }
-                />
-              </div>
-
-              <Separator />
-
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label>New messages</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Notification when receiving new comments
-                  </p>
-                </div>
-                <Switch
-                  checked={notifications.messageUpdates}
-                  onCheckedChange={(checked) =>
-                    setNotifications({ ...notifications, messageUpdates: checked })
-                  }
-                />
-              </div>
-            </CardContent>
-          </Card>
+        {/* Developer Tab */}
+        <TabsContent value="developer" className="space-y-6">
+          <ApiDocsCard />
         </TabsContent>
       </Tabs>
     </div>

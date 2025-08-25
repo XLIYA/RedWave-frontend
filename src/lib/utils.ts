@@ -53,33 +53,7 @@ export function formatRelativeTime(date: string | Date): string {
   return formatDate(date)
 }
 
-export function validateAudioFile(file: File): string | null {
-  const allowedTypes = ['audio/mpeg', 'audio/wav', 'audio/flac', 'audio/ogg']
-  
-  if (!allowedTypes.includes(file.type)) {
-    return 'فرمت فایل صوتی پشتیبانی نمی‌شود'
-  }
-  
-  if (file.size > 30 * 1024 * 1024) { // 30MB
-    return 'حجم فایل صوتی نباید بیش از ۳۰ مگابایت باشد'
-  }
-  
-  return null
-}
-
-export function validateImageFile(file: File): string | null {
-  const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
-  
-  if (!allowedTypes.includes(file.type)) {
-    return 'فرمت تصویر پشتیبانی نمی‌شود'
-  }
-  
-  if (file.size > 5 * 1024 * 1024) { // 5MB
-    return 'حجم تصویر نباید بیش از ۵ مگابایت باشد'
-  }
-  
-  return null
-}
+export { validateAudioFile, validateImageFile } from '@/lib/fileValidators'
 
 export function debounce<T extends (...args: any[]) => any>(
   func: T,

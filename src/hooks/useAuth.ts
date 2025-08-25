@@ -60,7 +60,7 @@ export const useAuth = create<AuthStore>()(
             const basicUser = {
               id: response.id,
               username: response.username,
-              role: response.role
+              role: (response.role as any) === 'admin' ? 'admin' : (response.role as any),
             } as User
             
             set({

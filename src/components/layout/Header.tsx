@@ -1,6 +1,8 @@
+// src/components/layout/Header.tsx
 'use client'
 
 import { useState, useEffect } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Search, User, LogOut, Music, Settings } from 'lucide-react'
 import { Input } from '@/components/ui/input'
@@ -48,10 +50,10 @@ export function Header() {
 
   return (
     <header
+      dir="ltr"
       className={cn(
-        // روی همه لایه‌ها قرار بگیره
         'sticky top-0 z-50 flex h-20 items-center justify-between transition-all duration-300',
-        'border-b backdrop-blur-xl',
+        'border-b backdrop-blur-xl text-left',
         isScrolled
           ? 'bg-gray-950/95 border-white/10 shadow-lg shadow-black/20'
           : 'bg-gray-950/80 border-white/10'
@@ -111,7 +113,6 @@ export function Header() {
 
         {/* Right: Actions */}
         <div className="flex items-center gap-3">
-          {/* User */}
           {user ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -128,7 +129,11 @@ export function Header() {
                   </Avatar>
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-64 bg-gray-900/95 backdrop-blur-xl border-gray-700/50 shadow-2xl">
+
+              <DropdownMenuContent
+                align="end"
+                className="w-64 bg-gray-900/95 backdrop-blur-xl border-gray-700/50 shadow-2xl"
+              >
                 <DropdownMenuLabel className="p-4">
                   <div className="flex items-center gap-3">
                     <Avatar className="h-12 w-12">
@@ -146,16 +151,34 @@ export function Header() {
                     </div>
                   </div>
                 </DropdownMenuLabel>
+
                 <DropdownMenuSeparator className="bg-gray-700/50" />
-                <DropdownMenuItem className="p-3 hover:bg-gray-800/50 cursor-pointer">
-                  <User className="h-4 w-4 mr-3 text-gray-400" />
-                  <span className="text-gray-300">Profile</span>
+
+                {/* Profile link */}
+                <DropdownMenuItem asChild className="p-0">
+                  <Link
+                    href="/profile"
+                    className="flex w-full items-center p-3 hover:bg-gray-800/50 focus:bg-gray-800/50 outline-none"
+                  >
+                    <User className="h-4 w-4 mr-3 text-gray-400" />
+                    <span className="text-gray-300">Profile</span>
+                  </Link>
                 </DropdownMenuItem>
-                <DropdownMenuItem className="p-3 hover:bg-gray-800/50 cursor-pointer">
-                  <Settings className="h-4 w-4 mr-3 text-gray-400" />
-                  <span className="text-gray-300">Settings</span>
+
+                {/* Settings link */}
+                <DropdownMenuItem asChild className="p-0">
+                  <Link
+                    href="/settings"
+                    className="flex w-full items-center p-3 hover:bg-gray-800/50 focus:bg-gray-800/50 outline-none"
+                  >
+                    <Settings className="h-4 w-4 mr-3 text-gray-400" />
+                    <span className="text-gray-300">Settings</span>
+                  </Link>
                 </DropdownMenuItem>
+
                 <DropdownMenuSeparator className="bg-gray-700/50" />
+
+                {/* Logout action */}
                 <DropdownMenuItem
                   onClick={handleLogout}
                   className="p-3 hover:bg-red-500/10 hover:text-red-400 cursor-pointer transition-colors duration-300"

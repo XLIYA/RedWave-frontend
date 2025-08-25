@@ -1,123 +1,271 @@
-//src/app/(app)/profile/page.tsx
-
 'use client'
 
-import { useState, useEffect } from 'react'
-import { Camera,Calendar, Music, Heart, Share, Settings } from 'lucide-react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { useState, useEffect, useCallback } from 'react'
+import { useSearchParams } from 'next/navigation'
+import { api } from '@/lib/api'
+import { useAuth } from '@/hooks/useAuth'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar'
-import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Alert, AlertDescription } from '@/components/ui/alert'
-import { useAuth } from '@/hooks/useAuth'
-import { api } from '@/lib/api'
-import { TrackCard } from '@/components/music/TrackCard'
-import { formatNumber, formatRelativeTime } from '@/lib/utils'
-import Link from 'next/link'
+import { ChevronLeft, ChevronRight, Music, Heart, List } from 'lucide-react'
 
-interface UserStats {
-  followers: number
-  following: number
-  songs: number
-  likes: number
-  playlists: number
-}
+import type { UserProfile, SongItem, PlaylistItem, FollowUser } from './components/types'
+import ProfileHeader from './components/ProfileHeader'
+import StatsPills from './components/StatsPills'
+import PeopleDrawer from './components/PeopleDrawer'
+import UploadsToolbar from './components/UploadsToolbar'
+import UploadCard from './components/UploadCard'
+import PlaylistCard from './components/PlaylistCard'
 
-interface UserProfile {
-  id: string
-  username: string
-  role: string
-  bio?: string
-  profileImage?: string
-  socialLinks?: any
-  isOnline: boolean
-  lastSeen: string
-  createdAt: string
-  _count: UserStats
+// Helper: English date formatting
+const formatDateEn = (dateString?: string) => {
+  if (!dateString) return ''
+  try {
+    return new Date(dateString).toLocaleDateString('en-US')
+  } catch {
+    return ''
+  }
 }
 
 export default function ProfilePage() {
-  const { user } = useAuth()
+  const { user: currentUser } = useAuth()
+  const searchParams = useSearchParams()
+  const targetUserId = searchParams.get('id') || undefined
+
+  // Determine mode
+  const isMyProfile = !targetUserId || targetUserId === currentUser?.id
+
+  // State
   const [profile, setProfile] = useState<UserProfile | null>(null)
-  const [uploads, setUploads] = useState<any[]>([])
-  const [likes, setLikes] = useState<any[]>([])
+  const [isFollowing, setIsFollowing] = useState(false)
   const [loading, setLoading] = useState(true)
-  const [uploadsLoading, setUploadsLoading] = useState(false)
-  const [likesLoading, setLikesLoading] = useState(false)
-  const [error, setError] = useState('')
-  const [activeTab, setActiveTab] = useState('overview')
+  const [error, setError] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState<'uploads' | 'playlists' | 'likes' | 'about'>('uploads')
 
-  useEffect(() => {
-    fetchProfile()
-  }, [])
+  // People drawer
+  const [peopleOpen, setPeopleOpen] = useState(false)
+  const [peopleType, setPeopleType] = useState<'followers' | 'following'>('followers')
+  const [peopleUsers, setPeopleUsers] = useState<FollowUser[]>([])
+  const [peopleLoading, setPeopleLoading] = useState(false)
+  const [peopleQuery, setPeopleQuery] = useState('')
 
-  const fetchProfile = async () => {
+  // Uploads
+  const [uploads, setUploads] = useState<{
+    data: SongItem[]
+    loading: boolean
+    currentPage: number
+    totalPages: number
+    searchQuery: string
+    genre: string
+    order: 'recent' | 'popular' | 'alphabetical'
+  }>({
+    data: [],
+    loading: false,
+    currentPage: 1,
+    totalPages: 1,
+    searchQuery: '',
+    genre: '',
+    order: 'recent',
+  })
+
+  // Playlists
+  const [playlists, setPlaylists] = useState<{
+    data: PlaylistItem[]
+    loading: boolean
+    currentPage: number
+    totalPages: number
+  }>({
+    data: [],
+    loading: false,
+    currentPage: 1,
+    totalPages: 1,
+  })
+
+  // Likes
+  const [likes, setLikes] = useState<{
+    data: SongItem[]
+    loading: boolean
+    currentPage: number
+    totalPages: number
+  }>({
+    data: [],
+    loading: false,
+    currentPage: 1,
+    totalPages: 1,
+  })
+
+  // Fetch profile
+  const fetchProfile = useCallback(async () => {
+    const controller = new AbortController()
     try {
       setLoading(true)
-      const data = await api.getMe()
-      setProfile(data)
-    } catch (err) {
-      console.error('Profile fetch error:', err)
-      setError('Error loading profile')
+      setError(null)
+      const profileData = isMyProfile
+        ? await api.getMe()
+        : await api.getUser(targetUserId!)
+      setProfile(profileData)
+      // If backend returns isFollowing for "other user" mode, set it here:
+      // setIsFollowing(!!profileData.isFollowing)
+    } catch (err: any) {
+      if (err.name !== 'AbortError') setError(err.message || 'Failed to load profile')
     } finally {
       setLoading(false)
     }
-  }
+    return () => controller.abort()
+  }, [isMyProfile, targetUserId])
 
-  const fetchUploads = async () => {
-    if (uploadsLoading) return
+  // Fetch uploads
+  const fetchUploads = useCallback(
+    async (page = 1, reset = true) => {
+      const controller = new AbortController()
+      try {
+        setUploads(prev => ({ ...prev, loading: true }))
+        const params = {
+          q: uploads.searchQuery || undefined,
+          genre: uploads.genre || undefined,
+          order: uploads.order,
+          page,
+          pageSize: 12,
+        }
+        const data = isMyProfile
+          ? await api.getMyUploads(params)
+          : await api.getUserUploads(targetUserId!, params)
+        setUploads(prev => ({
+          ...prev,
+          data: reset ? data.items : [...prev.data, ...data.items],
+          currentPage: page,
+          totalPages: data.pages || 1,
+          loading: false,
+        }))
+      } catch (err: any) {
+        if (err.name !== 'AbortError') console.error('Failed to load uploads:', err)
+        setUploads(prev => ({ ...prev, loading: false }))
+      }
+      return () => controller.abort()
+    },
+    [isMyProfile, targetUserId, uploads.searchQuery, uploads.genre, uploads.order]
+  )
+
+  // Fetch playlists
+  const fetchPlaylists = useCallback(
+    async (page = 1) => {
+      if (isMyProfile) return
+      const controller = new AbortController()
+      try {
+        setPlaylists(prev => ({ ...prev, loading: true }))
+        const data = await api.getUserPlaylists(targetUserId!, { page, pageSize: 12 })
+        setPlaylists({ data: data.items, loading: false, currentPage: page, totalPages: data.pages || 1 })
+      } catch (err: any) {
+        if (err.name !== 'AbortError') console.error('Failed to load playlists:', err)
+        setPlaylists(prev => ({ ...prev, loading: false }))
+      }
+      return () => controller.abort()
+    },
+    [isMyProfile, targetUserId]
+  )
+
+  // Fetch likes
+  const fetchLikes = useCallback(
+    async (page = 1) => {
+      if (!isMyProfile) return
+      const controller = new AbortController()
+      try {
+        setLikes(prev => ({ ...prev, loading: true }))
+        const data = await api.getMyLikes({ page, pageSize: 12 })
+        setLikes({ data: data.items, loading: false, currentPage: page, totalPages: data.pages || 1 })
+      } catch (err: any) {
+        if (err.name !== 'AbortError') console.error('Failed to load likes:', err)
+        setLikes(prev => ({ ...prev, loading: false }))
+      }
+      return () => controller.abort()
+    },
+    [isMyProfile]
+  )
+
+  // Fetch followers/following
+  const fetchPeople = useCallback(
+    async (type: 'followers' | 'following') => {
+      const controller = new AbortController()
+      try {
+        setPeopleLoading(true)
+        const data =
+          type === 'followers'
+            ? await api.getFollowers(isMyProfile ? undefined : targetUserId!)
+            : await api.getFollowing(isMyProfile ? undefined : targetUserId!)
+        setPeopleUsers(Array.isArray(data) ? data : [])
+      } catch (err: any) {
+        if (err.name !== 'AbortError') console.error(`Failed to load ${type}:`, err)
+      } finally {
+        setPeopleLoading(false)
+      }
+      return () => controller.abort()
+    },
+    [isMyProfile, targetUserId]
+  )
+
+  // Follow/Unfollow
+  const handleFollowToggle = async () => {
+    if (isMyProfile || !targetUserId) return
+    const prevFollowing = isFollowing
+    const prevCount = profile?._count?.followers || 0
+
+    setIsFollowing(!isFollowing) // optimistic
+    if (profile) {
+      setProfile(p => ({
+        ...p!,
+        _count: { ...p!._count!, followers: isFollowing ? prevCount - 1 : prevCount + 1 },
+      }))
+    }
     try {
-      setUploadsLoading(true)
-      const data = await api.getMyUploads({ pageSize: 6 })
-      setUploads(data.items || [])
+      if (isFollowing) await api.unfollowUser(targetUserId)
+      else await api.followUser(targetUserId)
     } catch (err) {
-      console.error('Uploads fetch error:', err)
-    } finally {
-      setUploadsLoading(false)
+      setIsFollowing(prevFollowing) // rollback
+      if (profile) {
+        setProfile(p => ({ ...p!, _count: { ...p!._count!, followers: prevCount } }))
+      }
+      setError('Failed to perform the action')
     }
   }
 
-  const fetchLikes = async () => {
-    if (likesLoading) return
-    try {
-      setLikesLoading(true)
-      const data = await api.getMyLikes({ pageSize: 6 })
-      setLikes(data.items || [])
-    } catch (err) {
-      console.error('Likes fetch error:', err)
-    } finally {
-      setLikesLoading(false)
-    }
-  }
-
+  // Initial
   useEffect(() => {
-    if (activeTab === 'uploads') {
-      fetchUploads()
-    } else if (activeTab === 'likes') {
-      fetchLikes()
-    }
-  }, [activeTab])
+    fetchProfile()
+  }, [fetchProfile])
+
+  // Load tab data
+  useEffect(() => {
+    if (activeTab === 'uploads') fetchUploads(1, true)
+    if (activeTab === 'playlists') fetchPlaylists(1)
+    if (activeTab === 'likes') fetchLikes(1)
+  }, [activeTab, fetchUploads, fetchPlaylists, fetchLikes])
+
+  // React to uploads filters
+  useEffect(() => {
+    if (activeTab !== 'uploads') return
+    const id = setTimeout(() => {
+      fetchUploads(1, true)
+    }, 300)
+    return () => clearTimeout(id)
+  }, [uploads.searchQuery, uploads.genre, uploads.order, activeTab, fetchUploads])
 
   if (loading) {
     return (
-      <div className="space-y-6 animate-fade-in">
-        <div className="space-y-4">
-          <Skeleton className="h-32 w-full rounded-xl" />
-          <div className="flex gap-4">
-            <Skeleton className="h-20 w-20 rounded-full" />
-            <div className="space-y-2 flex-1">
+      <div className="container max-w-6xl mx-auto p-6 space-y-6 text-left">
+        <div className="glass p-6 rounded-xl">
+          <div className="flex items-center gap-4">
+            <Skeleton className="h-24 w-24 rounded-full" />
+            <div className="flex-1 space-y-2">
               <Skeleton className="h-8 w-48" />
-              <Skeleton className="h-4 w-64" />
               <Skeleton className="h-4 w-32" />
+              <div className="flex gap-2">
+                <Skeleton className="h-6 w-20" />
+                <Skeleton className="h-6 w-20" />
+                <Skeleton className="h-6 w-20" />
+              </div>
             </div>
           </div>
-        </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <Skeleton key={i} className="h-24 rounded-lg" />
-          ))}
         </div>
       </div>
     )
@@ -125,249 +273,275 @@ export default function ProfilePage() {
 
   if (error || !profile) {
     return (
-      <Alert className="border-destructive/50 bg-destructive/10">
-        <AlertDescription className="text-destructive">
-          {error || 'profile not found'}
-        </AlertDescription>
-      </Alert>
+      <div className="container max-w-6xl mx-auto p-6 text-left">
+        <Alert className="glass">
+          <AlertDescription>{error || 'User not found'}</AlertDescription>
+        </Alert>
+        <Button onClick={() => fetchProfile()} className="btn-gradient mt-4">
+          Retry
+        </Button>
+      </div>
     )
   }
 
+  // Filter people in drawer (client-side search)
+  const filteredPeople = peopleUsers.filter(u =>
+    u.username.toLowerCase().includes(peopleQuery.toLowerCase())
+  )
+
   return (
-    <div className="space-y-6 animate-fade-in">
-      {/* Cover & Profile Section */}
-      <Card className="overflow-hidden">
-        <div className="h-32 bg-gradient-to-r from-red-500/20 to-red-600/20 relative">
-          <div className="absolute inset-0 bg-black/20" />
-        </div>
-
-        <CardContent className="pt-0 pb-6">
-          <div className="flex flex-col md:flex-row md:items-end gap-4 -mt-10">
-            {/* Avatar */}
-            <div className="relative">
-              <Avatar className="h-20 w-20 border-4 border-background">
-                <AvatarImage src={profile.profileImage} />
-                <AvatarFallback className="text-xl font-bold bg-primary text-primary-foreground">
-                  {profile.username.charAt(0).toUpperCase()}
-                </AvatarFallback>
-              </Avatar>
-              <Button
-                size="sm"
-                variant="outline"
-                className="absolute -bottom-1 -left-1 h-8 w-8 rounded-full p-0"
-              >
-                <Camera className="h-3 w-3" />
-              </Button>
-            </div>
-
-            {/* Profile Info */}
-            <div className="flex-1 space-y-2">
-              <div className="flex items-center gap-2">
-                <h1 className="text-2xl font-bold">{profile.username}</h1>
-                <Badge variant={profile.role === 'admin' ? 'default' : 'secondary'}>
-                  {profile.role === 'admin' ? 'admin' : 'user'}
-                </Badge>
-                {profile.isOnline && (
-                  <Badge variant="outline" className="text-green-500 border-green-500/50">
-                    Online
-                  </Badge>
-                )}
-              </div>
-
-              {profile.bio && (
-                <p className="text-muted-foreground">{profile.bio}</p>
-              )}
-
-              <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                <span className="flex items-center gap-1">
-                  <Calendar className="h-4 w-4" />
-                  member of{formatRelativeTime(profile.createdAt)}
-                </span>
-                {!profile.isOnline && (
-                  <span>Last activity{formatRelativeTime(profile.lastSeen)}</span>
-                )}
-              </div>
-            </div>
-
-            {/* Action Buttons */}
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm">
-                <Share className="h-4 w-4 ml-2" />
-                sharing
-              </Button>
-              <Button asChild>
-                <Link href="/settings">
-                  <Settings className="h-4 w-4 ml-2" />
-                  Edit profile
-                </Link>
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Stats Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-        <Card className="text-center">
-          <CardContent className="pt-6">
-            <div className="text-2xl font-bold text-primary">{formatNumber(profile._count.songs)}</div>
-            <p className="text-sm text-muted-foreground">songs</p>
-          </CardContent>
-        </Card>
-
-        <Card className="text-center">
-          <CardContent className="pt-6">
-            <div className="text-2xl font-bold text-primary">{formatNumber(profile._count.likes)}</div>
-            <p className="text-sm text-muted-foreground">likes</p>
-          </CardContent>
-        </Card>
-
-        <Card className="text-center">
-          <CardContent className="pt-6">
-            <div className="text-2xl font-bold text-primary">{formatNumber(profile._count.playlists)}</div>
-            <p className="text-sm text-muted-foreground">playlists</p>
-          </CardContent>
-        </Card>
-
-        <Card className="text-center">
-          <CardContent className="pt-6">
-            <div className="text-2xl font-bold text-primary">{formatNumber(profile._count.followers)}</div>
-            <p className="text-sm text-muted-foreground">follower</p>
-          </CardContent>
-        </Card>
-
-        <Card className="text-center">
-          <CardContent className="pt-6">
-            <div className="text-2xl font-bold text-primary">{formatNumber(profile._count.following)}</div>
-            <p className="text-sm text-muted-foreground">Followed</p>
-          </CardContent>
-        </Card>
+    <div className="container max-w-6xl mx-auto p-6 space-y-6 animate-fade-in text-left" dir="ltr">
+      {/* Header */}
+      <div className="glass p-6 rounded-xl card-hover">
+        <ProfileHeader
+          profile={profile}
+          isMyProfile={isMyProfile}
+          isFollowing={isFollowing}
+          onFollowToggle={handleFollowToggle}
+          formatDateEn={formatDateEn}
+        />
+        <StatsPills
+          counts={profile._count}
+          onOpenFollowers={() => {
+            setPeopleType('followers')
+            setPeopleOpen(true)
+            setPeopleQuery('')
+            fetchPeople('followers')
+          }}
+          onOpenFollowing={() => {
+            setPeopleType('following')
+            setPeopleOpen(true)
+            setPeopleQuery('')
+            fetchPeople('following')
+          }}
+        />
       </div>
 
-      {/* Content Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="overview">overview </TabsTrigger>
-          <TabsTrigger value="uploads">uploads</TabsTrigger>
-          <TabsTrigger value="likes">likes</TabsTrigger>
+      {/* Tabs */}
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)} className="glass p-6 rounded-xl">
+        <TabsList className="grid w-full grid-cols-4">
+          <TabsTrigger value="uploads">Uploads</TabsTrigger>
+          {!isMyProfile && <TabsTrigger value="playlists">Playlists</TabsTrigger>}
+          {isMyProfile && <TabsTrigger value="likes">Likes</TabsTrigger>}
+          <TabsTrigger value="about">About</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="overview" className="space-y-4">
-          <div className="grid md:grid-cols-2 gap-6">
-            {/* Recent Uploads */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Music className="h-5 w-5" />
-                  Latest uploads
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {uploads.length > 0 ? (
-                  <div className="space-y-3">
-                    {uploads.slice(0, 3).map(track => (
-                      <div key={track.id} className="flex items-center gap-3">
-                        <div className="h-12 w-12 rounded-lg bg-muted flex items-center justify-center">
-                          {track.coverImage ? (
-                            <img src={track.coverImage} alt={track.title} className="h-full w-full object-cover rounded-lg" />
-                          ) : (
-                            <Music className="h-5 w-5 text-muted-foreground" />
-                          )}
-                        </div>
-                        <div className="flex-1">
-                          <p className="font-medium truncate">{track.title}</p>
-                          <p className="text-sm text-muted-foreground">{track.artist}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-muted-foreground text-center py-4">You haven't uploaded any songs yet</p>
-                )}
-              </CardContent>
-            </Card>
+        {/* Uploads */}
+        <TabsContent value="uploads" className="space-y-4">
+          <UploadsToolbar
+            searchQuery={uploads.searchQuery}
+            genre={uploads.genre}
+            order={uploads.order}
+            onSearchChange={(q) => setUploads(prev => ({ ...prev, searchQuery: q }))}
+            onGenreChange={(g) => setUploads(prev => ({ ...prev, genre: g }))}
+            onOrderChange={(o) => setUploads(prev => ({ ...prev, order: o }))}
+          />
 
-            {/* Recent Likes */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Heart className="h-5 w-5" />
-                  Latest likes
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {likes.length > 0 ? (
-                  <div className="space-y-3">
-                    {likes.slice(0, 3).map(track => (
-                      <div key={track.id} className="flex items-center gap-3">
-                        <div className="h-12 w-12 rounded-lg bg-muted flex items-center justify-center">
-                          {track.coverImage ? (
-                            <img src={track.coverImage} alt={track.title} className="h-full w-full object-cover rounded-lg" />
-                          ) : (
-                            <Music className="h-5 w-5 text-muted-foreground" />
-                          )}
-                        </div>
-                        <div className="flex-1">
-                          <p className="font-medium truncate">{track.title}</p>
-                          <p className="text-sm text-muted-foreground">{track.artist}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-muted-foreground text-center py-4">You haven't liked any songs yet.</p>
+          {uploads.loading ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="glass p-4 rounded-lg">
+                  <Skeleton className="h-32 w-full mb-3 rounded" />
+                  <Skeleton className="h-4 w-3/4 mb-2" />
+                  <Skeleton className="h-3 w-1/2" />
+                </div>
+              ))}
+            </div>
+          ) : uploads.data.length > 0 ? (
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {uploads.data.map(song => (
+                  <UploadCard key={song.id} song={song} />
+                ))}
+              </div>
+
+              {uploads.totalPages > 1 && (
+                <div className="flex items-center justify-start gap-2 mt-6">
+                  <Button
+                    variant="outline"
+                    onClick={() => fetchUploads(uploads.currentPage - 1, true)}
+                    disabled={uploads.currentPage === 1 || uploads.loading}
+                  >
+                    <ChevronLeft className="w-4 h-4 mr-2" />
+                    Prev
+                  </Button>
+                  <span className="text-sm">
+                    Page {uploads.currentPage.toLocaleString('en-US')} of {uploads.totalPages.toLocaleString('en-US')}
+                  </span>
+                  <Button
+                    variant="outline"
+                    onClick={() => fetchUploads(uploads.currentPage + 1, true)}
+                    disabled={uploads.currentPage === uploads.totalPages || uploads.loading}
+                  >
+                    Next
+                    <ChevronRight className="w-4 h-4 ml-2" />
+                  </Button>
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="py-12 text-muted-foreground">
+              <div className="flex items-center gap-3">
+                <Music className="w-6 h-6" />
+                <p>No uploads yet</p>
+              </div>
+            </div>
+          )}
+        </TabsContent>
+
+        {/* Playlists */}
+        <TabsContent value="playlists">
+          {playlists.loading ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="glass p-4 rounded-lg">
+                  <Skeleton className="h-32 w-full mb-3 rounded" />
+                  <Skeleton className="h-4 w-3/4 mb-2" />
+                  <Skeleton className="h-3 w-1/2" />
+                </div>
+              ))}
+            </div>
+          ) : playlists.data.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {playlists.data.map(pl => (
+                <PlaylistCard key={pl.id} playlist={pl} formatDateEn={formatDateEn} />
+              ))}
+            </div>
+          ) : (
+            <div className="py-12 text-muted-foreground">
+              <div className="flex items-center gap-3">
+                <List className="w-6 h-6" />
+                <p>No playlists yet</p>
+              </div>
+            </div>
+          )}
+        </TabsContent>
+
+        {/* Likes */}
+        <TabsContent value="likes">
+          {likes.loading ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="glass p-4 rounded-lg">
+                  <Skeleton className="h-32 w-full mb-3 rounded" />
+                  <Skeleton className="h-4 w-3/4 mb-2" />
+                  <Skeleton className="h-3 w-1/2" />
+                </div>
+              ))}
+            </div>
+          ) : likes.data.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {likes.data.map(song => (
+                <UploadCard key={song.id} song={song} />
+              ))}
+            </div>
+          ) : (
+            <div className="py-12 text-muted-foreground">
+              <div className="flex items-center gap-3">
+                <Heart className="w-6 h-6" />
+                <p>You haven’t liked any songs yet</p>
+              </div>
+            </div>
+          )}
+        </TabsContent>
+
+        {/* About */}
+        <TabsContent value="about" className="space-y-6">
+          <div className="glass p-6 rounded-lg">
+            <h3 className="text-lg font-semibold mb-4">About {profile.username}</h3>
+            {profile.bio ? (
+              <p className="text-muted-foreground leading-relaxed">{profile.bio}</p>
+            ) : (
+              <p className="text-muted-foreground italic">No bio available</p>
+            )}
+          </div>
+
+          {profile.socialLinks && Object.values(profile.socialLinks).some(Boolean) && (
+            <div className="glass p-6 rounded-lg">
+              <h3 className="text-lg font-semibold mb-4">Social links</h3>
+              <div className="flex flex-wrap gap-3">
+                {profile.socialLinks?.instagram && (
+                  <a
+                    href={profile.socialLinks.instagram}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-lg hover:opacity-90 transition-opacity"
+                  >
+                    Instagram
+                  </a>
                 )}
-              </CardContent>
-            </Card>
+                {profile.socialLinks?.telegram && (
+                  <a
+                    href={profile.socialLinks.telegram}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:opacity-90 transition-opacity"
+                  >
+                    Telegram
+                  </a>
+                )}
+                {profile.socialLinks?.twitter && (
+                  <a
+                    href={profile.socialLinks.twitter}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 px-4 py-2 bg-sky-500 text-white rounded-lg hover:opacity-90 transition-opacity"
+                  >
+                    Twitter
+                  </a>
+                )}
+                {profile.socialLinks?.website && (
+                  <a
+                    href={profile.socialLinks.website}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 px-4 py-2 bg-gray-600 text-white rounded-lg hover:opacity-90 transition-opacity"
+                  >
+                    Website
+                  </a>
+                )}
+              </div>
+            </div>
+          )}
+
+          <div className="glass p-6 rounded-lg">
+            <h3 className="text-lg font-semibold mb-4">Account details</h3>
+            <div className="space-y-3 text-sm">
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Role:</span>
+                <span className="px-3 py-1 bg-muted rounded-full">{profile.role === 'admin' ? 'Admin' : 'User'}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Member since:</span>
+                <span>{formatDateEn(profile.createdAt)}</span>
+              </div>
+              {profile.lastSeen && (
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Last seen:</span>
+                  <span>{formatDateEn(profile.lastSeen)}</span>
+                </div>
+              )}
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Status:</span>
+                <div className="flex items-center gap-2">
+                  <div className={`w-2 h-2 rounded-full ${profile.isOnline ? 'bg-green-500' : 'bg-gray-400'}`} />
+                  <span>{profile.isOnline ? 'Online' : 'Offline'}</span>
+                </div>
+              </div>
+            </div>
           </div>
         </TabsContent>
-
-        <TabsContent value="uploads">
-          {uploadsLoading ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {Array.from({ length: 6 }).map((_, i) => (
-                <Skeleton key={i} className="aspect-square rounded-xl" />
-              ))}
-            </div>
-          ) : uploads.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {uploads.map(track => (
-                <TrackCard key={track.id} track={track} showPlayCount />
-              ))}
-            </div>
-          ) : (
-            <Card>
-              <CardContent className="text-center py-12">
-                <Music className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                <p className="text-muted-foreground">You haven't uploaded any songs yet</p>
-              </CardContent>
-            </Card>
-          )}
-        </TabsContent>
-
-        <TabsContent value="likes">
-          {likesLoading ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {Array.from({ length: 6 }).map((_, i) => (
-                <Skeleton key={i} className="aspect-square rounded-xl" />
-              ))}
-            </div>
-          ) : likes.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {likes.map(track => (
-                <TrackCard key={track.id} track={track} showAddedDate />
-              ))}
-            </div>
-          ) : (
-            <Card>
-              <CardContent className="text-center py-12">
-                <Heart className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                <p className="text-muted-foreground">You haven't liked any songs yet.</p>
-              </CardContent>
-            </Card>
-          )}
-        </TabsContent>
       </Tabs>
+
+      <PeopleDrawer
+        open={peopleOpen}
+        type={peopleType}
+        users={filteredPeople}
+        loading={peopleLoading}
+        searchQuery={peopleQuery}
+        onOpenChange={setPeopleOpen}
+        onSearchChange={setPeopleQuery}
+      />
     </div>
   )
 }

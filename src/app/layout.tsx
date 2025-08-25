@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
 import AudioProvider from '@/context/AudioProvider'
-import PlayerBar from '@/components/PlayerBar'
+import PlayerBar from '@/components/player/PlayerBar'
 
 const inter = Inter({ subsets: ['latin'] })
 

@@ -11,11 +11,13 @@ import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Progress } from '@/components/ui/progress'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { UploadAlbumWizard } from '@/components/upload/UploadAlbumWizard'
 import { Separator } from '@/components/ui/separator'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useAuth } from '@/hooks/useAuth'
 import { useUpload } from '@/hooks/useUpload'
-import { validateAudioFile, validateImageFile } from '@/lib/utils'
+import { ACCEPT_AUDIO, ACCEPT_IMAGE, validateAudioFile, validateImageFile } from '@/lib/fileValidators'
 
 const musicGenres = [
   'Pop', 'Rock', 'Classical', 'Traditional', 'Electronic', 'Rap', 'Jazz', 'Blues', 'Folk', 'Country'
@@ -70,7 +72,7 @@ export default function UploadPage() {
     )
   }
 
-  if (user.role !== 'admin') {
+  if (user.role?.toUpperCase?.() !== 'ADMIN') {
     return (
       <Card className="max-w-md mx-auto">
         <CardHeader>
@@ -105,6 +107,7 @@ export default function UploadPage() {
     if (validationError) {
       console.error(`❌ File validation failed (${type}):`, validationError)
       setErrors(prev => ({ ...prev, [type]: validationError }))
+      e.currentTarget.value = ''
       return
     }
 
@@ -125,7 +128,7 @@ export default function UploadPage() {
     setErrors(prev => ({ ...prev, [type]: '' }))
     
     // Reset file input
-    const fileInput = document.querySelector(`input[type="file"][accept="${type === 'audio' ? 'audio/*' : 'image/*'}"]`) as HTMLInputElement
+    const fileInput = document.querySelector(`input[type="file"][data-kind="${type}"]`) as HTMLInputElement
     if (fileInput) {
       fileInput.value = ''
     }
@@ -245,14 +248,18 @@ export default function UploadPage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Upload className="h-5 w-5" />
-            Upload a new song
+            Upload
           </CardTitle>
-          <CardDescription>
-            Enter song information and upload related files. Audio file is required, cover image is optional.
-          </CardDescription>
+          <CardDescription>Single track or album upload for admins</CardDescription>
         </CardHeader>
 
         <CardContent>
+          <Tabs defaultValue="single">
+            <TabsList className="mb-4">
+              <TabsTrigger value="single">Single Track</TabsTrigger>
+              <TabsTrigger value="album">Album</TabsTrigger>
+            </TabsList>
+            <TabsContent value="single">
           {/* General Error */}
           {(errors.general || uploadError) && (
             <Alert className="mb-4 border-destructive/50 bg-destructive/10">
@@ -388,11 +395,12 @@ export default function UploadPage() {
                     <div className="text-center">
                       <Upload className="mx-auto h-8 w-8 text-muted-foreground mb-2" />
                       <p className="text-sm text-muted-foreground mb-2">
-                        Select audio file (MP3, WAV, FLAC - max 30 MB)
+                        Audio: Select audio file (MP3, WAV, OGG, FLAC, AAC, M4A, WEBM – max 100 MB)
                       </p>
                       <Input
                         type="file"
-                        accept="audio/*,.mp3,.wav,.flac"
+                        accept={ACCEPT_AUDIO}
+                        data-kind="audio"
                         onChange={(e) => handleFileChange(e, 'audio')}
                         className="max-w-xs mx-auto"
                         disabled={uploading}
@@ -443,11 +451,12 @@ export default function UploadPage() {
                     <div className="text-center">
                       <Upload className="mx-auto h-8 w-8 text-muted-foreground mb-2" />
                       <p className="text-sm text-muted-foreground mb-2">
-                        Select cover image (JPG, PNG, WEBP - max 5 MB)
+                        Image: Select cover image (JPG, PNG, WEBP – max 10 MB)
                       </p>
                       <Input
                         type="file"
-                        accept="image/*,.jpg,.jpeg,.png,.webp"
+                        accept={ACCEPT_IMAGE}
+                        data-kind="cover"
                         onChange={(e) => handleFileChange(e, 'cover')}
                         className="max-w-xs mx-auto"
                         disabled={uploading}
@@ -489,6 +498,11 @@ export default function UploadPage() {
               )}
             </div>
           </form>
+            </TabsContent>
+            <TabsContent value="album">
+              <UploadAlbumWizard />
+            </TabsContent>
+          </Tabs>
         </CardContent>
       </Card>
     </div>

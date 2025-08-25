@@ -1,8 +1,8 @@
 'use client'
 
 import { useState, useCallback } from 'react'
-import { api } from '@/lib/api'
 import { SearchSuggestion } from '@/lib/types'
+import { api } from '@/lib/api'
 
 export const useSearch = () => {
   const [loading, setLoading] = useState(false)
